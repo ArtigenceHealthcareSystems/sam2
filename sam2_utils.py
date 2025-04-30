@@ -20,12 +20,20 @@ mask_generator = SAM2AutomaticMaskGenerator(
     min_mask_region_area=100
 )
 
-def segment_cells_with_sam(image_path):
-    image_bgr = cv2.imread(image_path)
-    if image_bgr is None:
-        raise ValueError(f"Could not read image at {image_path}")
+def segment_cells_with_sam(image):
+    """
+    Segment cells in an image using SAM2.
+    
+    Args:
+        image: numpy array of the image in BGR format (as returned by cv2.imread)
+    
+    Returns:
+        numpy array: Binary mask of the segmented cells
+    """
+    if image is None:
+        raise ValueError("Input image is None")
 
-    image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     masks = mask_generator.generate(image_rgb)
     print(f"[DEBUG] Total masks generated: {len(masks)}")
