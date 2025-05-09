@@ -1,56 +1,62 @@
-import os
-import cv2
-import numpy as np
-import torch
-from sam2.build_sam import build_sam2
-from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+import base64
+from io import BytesIO
+import io
 from PIL import Image
+import numpy as np
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+import torch
+import numpy as np
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 checkpoint = "checkpoints/sam2.1_hiera_large.pt"
 model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
-sam2_model = build_sam2(model_cfg, checkpoint, device=device, apply_postprocessing=False)
+sam_model = build_sam2(model_cfg, checkpoint, device=device, apply_postprocessing=False)
 
-mask_generator = SAM2AutomaticMaskGenerator(
-    model=sam2_model,
-    points_per_side=32,
-    pred_iou_thresh=0.8,
-    stability_score_thresh=0.85,
-    min_mask_region_area=100
+mask_generator = SAM2ImagePredictor(
+    sam_model = sam_model
 )
 
-def segment_cells_with_sam(image):
-    """
-    Segment cells in an image using SAM2.
-    
-    Args:
-        image: numpy array of the image in BGR format (as returned by cv2.imread)
-    
-    Returns:
-        numpy array: Binary mask of the segmented cells
-    """
-    if image is None:
-        raise ValueError("Input image is None")
+def decode_base64_image(image_base64: str) -> np.ndarray:
+    image_data = base64.b64decode(image_base64)
+    image = Image.open(io.BytesIO(image_data)).convert("RGB")
+    return np.array(image)
 
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    masks = mask_generator.generate(image_rgb)
-    print(f"[DEBUG] Total masks generated: {len(masks)}")
-
-    if not masks:
-        print("[DEBUG] No masks found.")
-        return None
-
-    MIN_AREA = 500
-    large_masks = [m for m in masks if np.sum(m['segmentation']) > MIN_AREA]
-
-    if large_masks:
-        best_mask_info = max(large_masks, key=lambda m: np.sum(m['segmentation']))
+def numpy_mask_to_base64(mask):
+    if isinstance(mask, np.ndarray):
+        mask = (mask * 255).astype(np.uint8)
+        img = Image.fromarray(mask)
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        base64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return base64_str
     else:
-        print("[DEBUG] No large masks found. Using first available mask.")
-        best_mask_info = masks[0]
+        raise ValueError("Expected numpy array for mask, got: {}".format(type(mask)))
 
-    mask = (best_mask_info['segmentation'] > 0).astype(np.uint8) * 255
-    print("[DEBUG] Mask extracted.")
-    return mask
+def get_masks_from_sam2(mask_generator, images, bboxes):
+    masks_batch = []
+    mask_generator.set_image(images[0])
+    
+    masks, ious, low_res_masks = mask_generator.predict(
+        box=bboxes,
+        multimask_output=False,
+        return_logits=False,
+    )
+
+    print(f"Generated {len(masks)} masks for the image.")
+
+    for mask, bbox in zip(masks, bboxes):
+        mask = np.squeeze(mask)
+
+        x1, y1, x2, y2 = bbox
+
+        cropped_mask = mask[y1:y2, x1:x2]
+
+        mask_base64 = numpy_mask_to_base64(cropped_mask)
+        masks_batch.append({
+            "mask_base64": mask_base64,
+            "bbox": bbox.tolist()
+        })
+
+    return masks_batch
