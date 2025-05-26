@@ -9,4 +9,4 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Set the entrypoint
-ENTRYPOINT ["python","sam2_handler.py"]
+ENTRYPOINT ["python","automatic_mask_generator_handler.py"]
