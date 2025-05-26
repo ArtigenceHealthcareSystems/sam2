@@ -16,8 +16,8 @@ sam2_model = build_sam2(model_cfg, checkpoint, device=device, apply_postprocessi
 mask_generator = SAM2AutomaticMaskGenerator(
     model=sam2_model,
     points_per_side=16,
-    pred_iou_thresh=0.85,
-    stability_score_thresh=0.9,
+    pred_iou_thresh=0.75,
+    stability_score_thresh=0.85,
     min_mask_region_area=150
 )
 
@@ -76,21 +76,17 @@ def encode_mask_to_base64(mask):
 
 def create_mask(image_base64):
     image = decode_base64_image(image_base64)
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.resize(image, (512, 512))
 
-    gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced = clahe.apply(gray)
-    crop_enhanced = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB)
+    masks = mask_generator.generate(image)
+    center_mask_info = find_center_cell_mask(masks, image.shape)
 
-    masks = mask_generator.generate(crop_enhanced)
-    center_mask_info = find_center_cell_mask(masks, crop_enhanced.shape)
+    mask = (center_mask_info['segmentation'] > 0).astype(np.uint8) * 255
 
     if center_mask_info is None:
         print("No valid mask found for crop")
         return None
-
-    binary_mask = (center_mask_info['segmentation'] > 0).astype(np.uint8) * 255
-    mask_base64 = encode_mask_to_base64(binary_mask)
+    
+    mask_base64 = encode_mask_to_base64(mask)
 
     return mask_base64
