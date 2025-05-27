@@ -9,3 +9,7 @@ _C.*
 outputs/*
 checkpoints/*.pt
 demo/backend/checkpoints/*.pt
+combined_dataset_split_rabin_second_all.zip
+combined_dataset_split_rabin_second_all
+combined_dataset_split_rabin_second_all_masks
+combined_dataset_split_rabin_second_all_masks.zip

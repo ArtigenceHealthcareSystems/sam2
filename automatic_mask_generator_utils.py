@@ -3,9 +3,6 @@ import numpy as np
 import torch
 from sam2.build_sam import build_sam2
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
-from PIL import Image
-import base64
-from io import BytesIO
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -16,15 +13,23 @@ sam2_model = build_sam2(model_cfg, checkpoint, device=device, apply_postprocessi
 mask_generator = SAM2AutomaticMaskGenerator(
     model=sam2_model,
     points_per_side=16,
-    pred_iou_thresh=0.75,
-    stability_score_thresh=0.85,
-    min_mask_region_area=150
+    pred_iou_thresh = 0.6,
+    stability_score_thresh = 0.7,
+    min_mask_region_area = 1500
 )
 
-def decode_base64_image(image_base64: str) -> np.ndarray:
-    image_data = base64.b64decode(image_base64)
-    image = Image.open(BytesIO(image_data)).convert("RGB")
-    return np.array(image)
+def resize_with_padding(img, target_size=512):
+    h, w = img.shape[:2]
+    scale = target_size / max(h, w)
+    resized = cv2.resize(img, (int(w * scale), int(h * scale)))
+    
+    delta_w = target_size - resized.shape[1]
+    delta_h = target_size - resized.shape[0]
+    top, bottom = delta_h // 2, delta_h - (delta_h // 2)
+    left, right = delta_w // 2, delta_w - (delta_w // 2)
+
+    padded_img = cv2.copyMakeBorder(resized, top, bottom, left, right, cv2.BORDER_CONSTANT, value=[255,255,255])
+    return padded_img, scale, left, top
 
 def is_fully_inside(inner_mask, outer_mask):
     if inner_mask.shape != outer_mask.shape:
@@ -68,25 +73,48 @@ def find_center_cell_mask(masks, image_shape, min_area=1500, max_area_ratio=0.9)
 
     return None
 
-def encode_mask_to_base64(mask):
-    pil_img = Image.fromarray(mask)
-    buffered = BytesIO()
-    pil_img.save(buffered, format="PNG")
-    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+def enhance_contrast(img):
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    cl = clahe.apply(l)
+    limg = cv2.merge((cl,a,b))
+    enhanced_img = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    return enhanced_img
 
-def create_mask(image_base64):
-    image = decode_base64_image(image_base64)
-    image = cv2.resize(image, (512, 512))
+def denoise_image(img):
+    return cv2.fastNlMeansDenoisingColored(img, None, h=10, hColor=10, templateWindowSize=7, searchWindowSize=21)
 
-    masks = mask_generator.generate(image)
-    center_mask_info = find_center_cell_mask(masks, image.shape)
+def sharpen_image(img):
+    kernel = np.array([[0, -1, 0],
+                       [-1, 5,-1],
+                       [0, -1, 0]])
+    return cv2.filter2D(img, -1, kernel)
 
-    mask = (center_mask_info['segmentation'] > 0).astype(np.uint8) * 255
+def boost_saturation(img):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    s = cv2.equalizeHist(s)
+    hsv_enhanced = cv2.merge((h, s, v))
+    return cv2.cvtColor(hsv_enhanced, cv2.COLOR_HSV2BGR)
+
+
+def create_mask(image: np.ndarray) -> np.ndarray | None:
+    enhanced = enhance_contrast(image)
+    denoised = denoise_image(enhanced)
+    sharpened = sharpen_image(denoised)
+
+    padded_img, scale, x_off, y_off = resize_with_padding(sharpened, target_size=512)
+    masks = mask_generator.generate(padded_img)
+    center_mask_info = find_center_cell_mask(masks, padded_img.shape)
 
     if center_mask_info is None:
         print("No valid mask found for crop")
         return None
-    
-    mask_base64 = encode_mask_to_base64(mask)
 
-    return mask_base64
+    mask = (center_mask_info['segmentation'] > 0).astype(np.uint8) * 255
+    h, w = image.shape[:2]
+    mask_cropped = mask[y_off:y_off + int(h*scale), x_off:x_off + int(w*scale)]
+    mask_final = cv2.resize(mask_cropped, (w, h), interpolation=cv2.INTER_NEAREST)
+
+    return mask_final
