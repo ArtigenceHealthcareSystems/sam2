@@ -1,0 +1,8 @@
+{
+    "input" : {
+        "patient_id" : "test",
+        "sample_type" : "Blood",
+        "image_blob_name" : "test.png",
+        "generator_type" : "multi_shot"
+    }
+}
