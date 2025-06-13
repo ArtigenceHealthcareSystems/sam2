@@ -1,0 +1,24 @@
+FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+
+# Set working directory
+WORKDIR /app
+
+# Copy everything from current directory to /app
+COPY . .
+
+# Mkdir checkpoints
+RUN mkdir -p checkpoints
+
+#Download Checkpoint
+RUN wget https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt -O checkpoints/sam2.1_hiera_large.pt
+
+RUN pip install -e .
+
+#Install runpod
+RUN pip install runpod==1.7.7
+RUN pip install azure-storage-blob==12.23.1
+RUN pip install opencv-python==4.11.0.86
+
+
+# Set the entrypoint
+ENTRYPOINT ["python","sam2_for_od_handler.py"]
