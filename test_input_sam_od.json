@@ -2,7 +2,7 @@
     "input" : {
         "patient_id" : "test",
         "sample_type" : "Blood",
-        "image_blob_name" : "test.png",
-        "generator_type" : "multi_shot"
+        "image_blob_name" : "motion_capture_20250614_113714.jpg",
+        "generator_type" : "single_shot"
     }
 }
