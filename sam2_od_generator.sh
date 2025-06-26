@@ -5,6 +5,24 @@ check_command() {
     fi
 }
 
+get_all_versions() {
+    local registry_name="$1"
+    local image_name="$2"
+    
+    echo "Fetching all versions from $registry_name/$image_name..."
+    local versions=$(az acr repository show-tags --name "$registry_name" --repository "$image_name" --orderby time_desc -o tsv)
+    
+    if [ -z "$versions" ]; then
+        echo "No versions found in the repository."
+        return
+    fi
+    
+    echo "Available versions:"
+    echo "$versions" | while read -r version; do
+        echo "  - $version"
+    done
+}
+
 get_current_version() {
     local registry_name="$1"
     local image_name="$2"
@@ -73,11 +91,14 @@ main() {
     local image_name="sam2_od"
     local dockerfile="sam2_od_Dockerfile"
     
+    # Display all versions
+    get_all_versions "$registry_name" "$image_name"
+    
     # Get current version
     current_version=$(get_current_version "$registry_name" "$image_name")
     
     # Ask user for new version
-    echo "Current version: $current_version"
+    echo -e "\nCurrent version: $current_version"
     echo "Enter new version number (format: vX.Y or X.Y, e.g., v1.9 or 1.9):"
     read -p "New version: " new_version
     

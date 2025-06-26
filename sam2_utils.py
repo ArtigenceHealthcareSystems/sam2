@@ -162,14 +162,15 @@ def generate_yolo_annotations_from_image(image_array: np.ndarray, class_id: int 
         automatic_mask_generator = SAM2AutomaticMaskGenerator(
             model=sam_model,
             # Optimized settings for cell images
-            points_per_side=32,           # Reduced for smaller cell images
-            points_per_batch=64,          # Batch size for processing
-            pred_iou_thresh=0.8,          # Higher threshold for quality
-            stability_score_thresh=0.9,   # Higher stability requirement
+            points_per_side=64,           # Reduced for smaller cell images
+            points_per_batch=128,          # Batch size for processing
+            pred_iou_thresh=0.7,          # Higher threshold for quality
+            stability_score_thresh=0.92,   # Higher stability requirement
             stability_score_offset=0.7,   # Stability offset
-            crop_n_layers=0,              # No crops for small cell images
-            box_nms_thresh=0.7,           # Non-max suppression threshold
-            min_mask_region_area=10.0,    # Minimum area for small cells
+            crop_n_layers=1,              # No crops for small cell images
+            box_nms_thresh=0.7,
+            crop_n_points_downscale_factor=2,
+            min_mask_region_area=25.0,    # Minimum area for small cells
             use_m2m=True,                 # Use mask-to-mask refinement
         )
     elif generator_type == "single_shot":
