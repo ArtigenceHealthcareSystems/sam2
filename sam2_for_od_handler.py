@@ -191,6 +191,7 @@ def handler(job):
             "success": True,
             "input_image": blob_name,
             "total_annotations": len(yolo_annotations),
+            "annotations": yolo_annotations,
             "annotations_file": annotations_blob_name if annotations_uploaded else None,
             "mask_file": mask_blob_name if mask_uploaded else None,
             "mask_shape": combined_mask.shape,
@@ -200,9 +201,6 @@ def handler(job):
                 "mask_uploaded": mask_uploaded
             }
         }
-        
-        if yolo_annotations:
-            response["sample_annotations"] = yolo_annotations[:3]  # Show first 3 annotations as sample
         
         print(f"Processing completed successfully")
         print(f"Annotations uploaded: {annotations_uploaded}")
